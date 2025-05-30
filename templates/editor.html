@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Python Code Editor</title>
+    <link rel="stylesheet" href="{% load static %}{% static 'style.css' %}" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Python Code Editor</h1>
+      </header>
+
+      <div class="editor-container">
+        <div class="editor-panel">
+          <div class="panel-header">
+            <span>Code Editor</span>
+            <button id="runBtn" class="run-btn">▶ Run Code</button>
+          </div>
+          <div id="editor"></div>
+        </div>
+
+        <div class="output-panel">
+          <div class="panel-header">
+            <span>Output</span>
+            <button id="clearBtn" class="clear-btn">Clear</button>
+          </div>
+          <div id="output" class="output-content"></div>
+          <div id="inputSection" class="input-section" style="display: none">
+            <input type="text" id="userInput" placeholder="Enter input..." />
+            <button id="submitInput">Submit</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let editor;
+      let currentCode = "";
+      let waitingForInput = false;
+
+      // Initialize Monaco Editor
+      require.config({
+        paths: {
+          vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs",
+        },
+      });
+      require(["vs/editor/editor.main"], function () {
+        editor = monaco.editor.create(document.getElementById("editor"), {
+          value:
+            '# Welcome to Python Code Editor!\n# Write your Python code here and click Run\n\nprint("Hello, World!")\nprint("Enter your code above and click the Run button")',
+          language: "python",
+          theme: "vs-dark",
+          fontSize: 14,
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          automaticLayout: true,
+        });
+      });
+
+      // Event listeners
+      document.getElementById("runBtn").addEventListener("click", runCode);
+      document
+        .getElementById("clearBtn")
+        .addEventListener("click", clearOutput);
+      document
+        .getElementById("submitInput")
+        .addEventListener("click", submitInput);
+      document
+        .getElementById("userInput")
+        .addEventListener("keypress", function (e) {
+          if (e.key === "Enter") submitInput();
+        });
+
+      async function runCode() {
+        if (!editor) return;
+
+        const code = editor.getValue();
+        if (!code.trim()) {
+          displayOutput("No code to run!", "error");
+          return;
+        }
+
+        currentCode = code;
+        setRunning(true);
+
+        try {
+          const response = await fetch("/run/", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ code: code }),
+          });
+
+          const result = await response.json();
+          handleResult(result);
+        } catch (error) {
+          displayOutput(`Network error: ${error.message}`, "error");
+        } finally {
+          setRunning(false);
+        }
+      }
+
+      async function submitInput() {
+        if (!waitingForInput) return;
+
+        const userInput = document.getElementById("userInput").value;
+        document.getElementById("inputSection").style.display = "none";
+        waitingForInput = false;
+
+        setRunning(true);
+
+        try {
+          const response = await fetch("/run/", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              code: currentCode,
+              input: userInput,
+            }),
+          });
+
+          const result = await response.json();
+          handleResult(result);
+        } catch (error) {
+          displayOutput(`Network error: ${error.message}`, "error");
+        } finally {
+          setRunning(false);
+        }
+      }
+
+      function handleResult(result) {
+        if (result.success) {
+          if (result.needs_input) {
+            displayOutput("Waiting for input...", "info");
+            showInputSection();
+          } else {
+            if (result.output) displayOutput(result.output, "output");
+            if (result.error) displayOutput(result.error, "error");
+          }
+        } else {
+          displayOutput(result.error || "Unknown error occurred", "error");
+        }
+      }
+
+      function displayOutput(text, type) {
+        const output = document.getElementById("output");
+        const div = document.createElement("div");
+        div.className = `output-line ${type}`;
+        div.textContent = text;
+        output.appendChild(div);
+        output.scrollTop = output.scrollHeight;
+      }
+
+      function clearOutput() {
+        document.getElementById("output").innerHTML = "";
+        document.getElementById("inputSection").style.display = "none";
+        waitingForInput = false;
+      }
+
+      function showInputSection() {
+        const inputSection = document.getElementById("inputSection");
+        inputSection.style.display = "flex";
+        document.getElementById("userInput").value = "";
+        document.getElementById("userInput").focus();
+        waitingForInput = true;
+      }
+
+      function setRunning(running) {
+        const runBtn = document.getElementById("runBtn");
+        runBtn.disabled = running;
+        runBtn.textContent = running ? "⏳ Running..." : "▶ Run Code";
+      }
+    </script>
+  </body>
+</html>

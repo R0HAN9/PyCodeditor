@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: python-editor
+    env: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: DOCKER_IMAGE
+        value: "python:3.11-slim"
+    disk:
+      name: docker-data
+      mountPath: /var/lib/docker
+      sizeGB: 10
